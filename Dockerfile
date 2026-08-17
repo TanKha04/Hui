@@ -1,5 +1,5 @@
 # Build Stage 1: Build frontend
-FROM node:20-slim AS frontend-builder
+FROM node:20 AS frontend-builder
 WORKDIR /app/client
 
 COPY client/package*.json ./
@@ -9,7 +9,7 @@ COPY client/ ./
 RUN npm run build
 
 # Build Stage 2: Production Server
-FROM node:20-slim
+FROM node:20
 WORKDIR /app
 
 COPY package*.json ./
