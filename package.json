@@ -1,11 +1,11 @@
 {
   "name": "qlh",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Ung dung quan ly hui",
+  "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
-    "build": "cd client && npm run build",
+    "build": "npm --prefix client install && npm --prefix client run build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

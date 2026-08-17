@@ -1,5 +1,5 @@
 # Build Stage 1: Build frontend
-FROM node:20-alpine AS frontend-builder
+FROM node:20-slim AS frontend-builder
 WORKDIR /app/client
 
 COPY client/package*.json ./
@@ -9,11 +9,8 @@ COPY client/ ./
 RUN npm run build
 
 # Build Stage 2: Production Server
-FROM node:20-alpine
+FROM node:20-slim
 WORKDIR /app
-
-# Install native dependencies for better-sqlite3 build if needed
-RUN apk add --no-cache python3 make g++
 
 COPY package*.json ./
 RUN npm install --omit=dev
