@@ -39,7 +39,32 @@ export default function App() {
       setLoading(true);
       const res = await api.getGroups();
       if (res.success) {
-        setGroups(res.data);
+        let groupList = res.data || [];
+        // Ensure each group has member_names array even if backend was not restarted yet
+        const missingMemberGroups = groupList.filter(
+          (g) => !g.member_names || g.member_names.length === 0
+        );
+        if (missingMemberGroups.length > 0) {
+          const detailResults = await Promise.all(
+            missingMemberGroups.map((g) => api.getGroupDetail(g.id).catch(() => null))
+          );
+          const memberMap = {};
+          detailResults.forEach((d) => {
+            if (d?.success && d?.data?.group?.id && Array.isArray(d?.data?.members)) {
+              memberMap[d.data.group.id] = d.data.members
+                .map((m) => m.member_name)
+                .filter(Boolean);
+            }
+          });
+          groupList = groupList.map((g) => ({
+            ...g,
+            member_names:
+              g.member_names && g.member_names.length > 0
+                ? g.member_names
+                : memberMap[g.id] || [],
+          }));
+        }
+        setGroups(groupList);
       }
     } catch (err) {
       console.error('Error fetching groups:', err);
@@ -193,6 +218,7 @@ export default function App() {
                   setTargetPeriod(null);
                   setTargetMemberId(null);
                   fetchDueCount();
+                  fetchGroups();
                 }}
               />
             ) : (
@@ -202,6 +228,7 @@ export default function App() {
                 onOpenCreateModal={() => setIsCreateModalOpen(true)}
                 onDeleteGroup={handleDeleteGroup}
                 searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
               />
             )
           )}

@@ -16,11 +16,18 @@ app.get('/api/groups', (req, res) => {
     const groups = db.prepare(`
       SELECT g.*, 
         (SELECT COUNT(*) FROM hui_members WHERE group_id = g.id) as member_count,
-        (SELECT COUNT(*) FROM hui_periods WHERE group_id = g.id AND is_settled = 1) as settled_periods_count
+        (SELECT COUNT(*) FROM hui_periods WHERE group_id = g.id AND is_settled = 1) as settled_periods_count,
+        (SELECT GROUP_CONCAT(member_name, '|||') FROM hui_members WHERE group_id = g.id) as member_names_str
       FROM hui_groups g
       ORDER BY g.id DESC
     `).all();
-    res.json({ success: true, data: groups });
+
+    const formattedGroups = groups.map(g => ({
+      ...g,
+      member_names: g.member_names_str ? g.member_names_str.split('|||').filter(Boolean) : []
+    }));
+
+    res.json({ success: true, data: formattedGroups });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

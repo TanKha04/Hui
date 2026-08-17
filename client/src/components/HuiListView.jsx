@@ -16,22 +16,63 @@ import {
   Printer,
   ShieldCheck,
   CheckCircle2,
+  X,
+  UserCheck,
 } from 'lucide-react';
 import { formatVND, formatDateVN } from '../services/api';
 
-export default function HuiListView({ groups, onSelectGroup, onOpenCreateModal, onDeleteGroup, searchQuery }) {
+const removeAccents = (str) => {
+  if (!str) return '';
+  return str
+    .toString()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'd')
+    .trim();
+};
+
+export default function HuiListView({
+  groups,
+  onSelectGroup,
+  onOpenCreateModal,
+  onDeleteGroup,
+  searchQuery = '',
+  setSearchQuery,
+}) {
   const [filterStatus, setFilterStatus] = useState('all'); // 'all' | 'active' | 'completed'
 
-  const filteredGroups = groups.filter((g) => {
-    const matchSearch = g.name.toLowerCase().includes((searchQuery || '').toLowerCase()) ||
-      (g.host_name || '').toLowerCase().includes((searchQuery || '').toLowerCase());
-    if (!matchSearch) return false;
+  const normalizedQuery = removeAccents(searchQuery);
+
+  const processedGroups = groups.map((g) => {
+    const memberList = Array.isArray(g.member_names) ? g.member_names : [];
+    let matchingMembers = [];
+
+    let matchSearch = true;
+    if (normalizedQuery) {
+      const matchName = removeAccents(g.name).includes(normalizedQuery);
+      const matchHost = removeAccents(g.host_name).includes(normalizedQuery);
+      matchingMembers = memberList.filter((m) => removeAccents(m).includes(normalizedQuery));
+      const matchMember = matchingMembers.length > 0;
+      matchSearch = matchName || matchHost || matchMember;
+    }
 
     const isCompleted = (g.current_period || 1) >= (g.total_members || 20);
-    if (filterStatus === 'active') return !isCompleted;
-    if (filterStatus === 'completed') return isCompleted;
-    return true;
+    let matchFilter = true;
+    if (filterStatus === 'active') matchFilter = !isCompleted;
+    if (filterStatus === 'completed') matchFilter = isCompleted;
+
+    return {
+      ...g,
+      matchSearch,
+      matchFilter,
+      matchingMembers,
+      isCompleted,
+    };
   });
+
+  const filteredGroups = processedGroups.filter((g) => g.matchSearch && g.matchFilter);
 
   const totalPotValue = groups.reduce(
     (sum, g) => sum + (g.amount_per_member * (g.total_members || 20)),
@@ -96,12 +137,12 @@ export default function HuiListView({ groups, onSelectGroup, onOpenCreateModal, 
         </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 pb-3">
-        <div className="flex items-center gap-2">
+      {/* Filter Tabs & Search Controls */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-b border-slate-200/80 pb-3.5">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
           <button
             onClick={() => setFilterStatus('all')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               filterStatus === 'all'
                 ? 'bg-slate-900 text-white shadow-sm'
                 : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
@@ -111,7 +152,7 @@ export default function HuiListView({ groups, onSelectGroup, onOpenCreateModal, 
           </button>
           <button
             onClick={() => setFilterStatus('active')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               filterStatus === 'active'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
@@ -119,38 +160,95 @@ export default function HuiListView({ groups, onSelectGroup, onOpenCreateModal, 
           >
             Đang chạy ({groups.filter(g => (g.current_period || 1) < (g.total_members || 20)).length})
           </button>
+          <button
+            onClick={() => setFilterStatus('completed')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              filterStatus === 'completed'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+            }`}
+          >
+            Hoàn tất ({groups.filter(g => (g.current_period || 1) >= (g.total_members || 20)).length})
+          </button>
         </div>
 
-        <div className="text-xs text-slate-400 font-semibold hidden sm:block">
-          Hiển thị <strong>{filteredGroups.length}</strong> dây hụi
+        {/* Search Bar */}
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 sm:w-80 min-w-0">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery && setSearchQuery(e.target.value)}
+              placeholder="Tìm tên hụi, thành viên, chủ hụi..."
+              className="w-full pl-9 pr-8 py-2 text-xs bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all shadow-sm"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery && setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+                title="Xóa tìm kiếm"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="text-xs text-slate-400 font-semibold whitespace-nowrap hidden lg:block">
+            {normalizedQuery ? (
+              <span>Tìm thấy <strong>{filteredGroups.length}</strong> dây hụi</span>
+            ) : (
+              <span>Hiển thị <strong>{filteredGroups.length}</strong> dây hụi</span>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Grid of Hui Cards */}
       {filteredGroups.length === 0 ? (
-        <div className="bg-white rounded-3xl p-8 sm:p-14 text-center border border-slate-200/90 shadow-card space-y-4 max-w-lg mx-auto">
-          <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
-            <BookUser className="w-10 h-10" />
+        normalizedQuery ? (
+          <div className="bg-white rounded-3xl p-8 sm:p-12 text-center border border-slate-200/90 shadow-card space-y-4 max-w-lg mx-auto">
+            <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
+              <Search className="w-8 h-8" />
+            </div>
+            <h3 className="text-base sm:text-lg font-black text-slate-800">Không tìm thấy kết quả phù hợp</h3>
+            <p className="text-xs sm:text-sm text-slate-500 max-w-sm mx-auto leading-relaxed">
+              Không có dây hụi hoặc thành viên nào khớp với từ khóa <strong className="text-slate-800 font-bold">"{searchQuery}"</strong>.
+            </p>
+            <button
+              onClick={() => setSearchQuery && setSearchQuery('')}
+              className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 active:scale-95"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Xóa bộ lọc tìm kiếm</span>
+            </button>
           </div>
-          <h3 className="text-lg font-black text-slate-800">Chưa có dây hụi nào phù hợp</h3>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
-            Hãy bắt đầu tạo dây hụi đầu tiên để quản lý danh sách các thành viên, số tiền hốt và tiến độ thu hụi hàng kỳ.
-          </p>
-          <button
-            onClick={onOpenCreateModal}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black shadow-lg shadow-blue-500/25 transition-all cursor-pointer transform active:scale-95 inline-flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Tạo Dây Hụi Mới Ngay</span>
-          </button>
-        </div>
+        ) : (
+          <div className="bg-white rounded-3xl p-8 sm:p-14 text-center border border-slate-200/90 shadow-card space-y-4 max-w-lg mx-auto">
+            <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
+              <BookUser className="w-10 h-10" />
+            </div>
+            <h3 className="text-lg font-black text-slate-800">Chưa có dây hụi nào phù hợp</h3>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+              Hãy bắt đầu tạo dây hụi đầu tiên để quản lý danh sách các thành viên, số tiền hốt và tiến độ thu hụi hàng kỳ.
+            </p>
+            <button
+              onClick={onOpenCreateModal}
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black shadow-lg shadow-blue-500/25 transition-all cursor-pointer transform active:scale-95 inline-flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tạo Dây Hụi Mới Ngay</span>
+            </button>
+          </div>
+        )
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
           {filteredGroups.map((group) => {
             const total = group.total_members || 20;
             const current = group.current_period || 1;
             const progressPercent = Math.min(100, Math.round((current / total) * 100));
-            const isCompleted = current >= total;
+            const isCompleted = group.isCompleted;
 
             return (
               <div
@@ -235,6 +333,17 @@ export default function HuiListView({ groups, onSelectGroup, onOpenCreateModal, 
                     </div>
                   </div>
                 </div>
+
+                {/* Matching members indicator when searching */}
+                {group.matchingMembers && group.matchingMembers.length > 0 && (
+                  <div className="bg-blue-50/90 border border-blue-200/80 rounded-xl px-3 py-1.5 flex items-center gap-2 text-xs">
+                    <UserCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                    <div className="text-slate-600 truncate">
+                      <span className="font-medium text-slate-500">Thành viên khớp: </span>
+                      <strong className="text-blue-700 font-bold">{group.matchingMembers.join(', ')}</strong>
+                    </div>
+                  </div>
+                )}
 
                 {/* Bottom Actions */}
                 <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
