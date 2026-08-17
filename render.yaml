@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: hui
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm run build
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 3000
